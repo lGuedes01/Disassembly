@@ -6,13 +6,44 @@ fim:
 	move $a0, $v0
 	li $v0, 17
 	syscall
+	
+	
+	
+abrir_arquivo_para_escrita:
+#prologo
+
+#corpo
+	la $a0, nome_arquivo_de_escrita
+	li $a1, 1
+	li $a2, 0
+	li $v0, 13
+	syscall
+
+#epilogo
+	jr $ra
+	
+	
+escreve_arquivo:
+#prologo
+# tenho que passar por a0 a string que quero botar no arquivo e por a1 o numero de caracteres da string. Depois passas a1 -> a2 e a0 -> a1
+#corpo
+	move $a2, $a1
+	move $a1, $a0
+	
+	la $t0, descritor_arquivo_de_escrita
+	lw $a0, 0($t0)
+	li $v0, 15
+	syscall
+#epilogo
+	jr $ra
 
 abrir_arquivo_para_leitura:
 #prologo
 
 #corpo
-	move $a1, $zero
-	move $a2, $zero
+	la $a0, nome_arquivo_de_leitura
+	li $a1, 0
+	li $a2, 0
 	li $v0, 13
 	syscall
 
@@ -23,6 +54,11 @@ abrir_arquivo_para_leitura:
 ler_arquivo:
 #prologo
 #corpo
+	la $t0, descritor_arquivo_de_leitura
+	lw $a0, 0($t0)#armazena em a0 o descritor
+		
+	la $a1, buffer_leitura # armazena o endereço do buffer em a1
+	
 	li $a2, 4 #numero de bytes para ser lido do arquivo
 	li $v0, 14
 	syscall
@@ -31,33 +67,46 @@ ler_arquivo:
 	
 	
 bin_to_hex:
-	move $t0, $a0
+#prologo
+	addiu $sp, $sp, -16
+	sw $ra, 0($sp)
+	sw $s0, 4($sp)
+	sw $s1, 8($sp)
+	sw $a0, 12($sp)#armazena o numero que foi passado para a função
+#corpo
 	
 	#imprimir o Ox
 	la $a0, hex_char # a0 = endereço da string com caracteres hexadecimais
-	li $v0, 4
-	syscall
+	li $a1, 2
+	jal escreve_arquivo
 	
-	li $t1, 0 #o procedimento irá de 0 a 7
+	
+	li $s0, 0 #o procedimento irá de 0 a 7
+	lw $s1, 12($sp)#carrega o numero passado para a função em s1
 	for_bin_to_hex:
 	#codigo for
 	la $a0, hex_char
-	la $t3, mascara_4_primeiros_bits
-	lw $t3, 0($t3)
-	and $t2, $t0, $t3 #t2 = 4 bits mais significativos
-	sll $t0, $t0, 4 #muda os 4 bits mais significativos
-	srl $t2, $t2, 28 #ajeita os bits depois de usar a mascara
-	sll $t2, $t2, 1 #multiplica t2 por 2
-	add $t2, $t2, 3 #adiciona 4 para q a0 possa receber o endereço do numero correspondente
-	add $a0, $a0, $t2 #a0 == endereço na string do caracter correspondente ao numero
+	la $t0, mascara_4_primeiros_bits
+	lw $t0, 0($t0)
+	and $t1, $s1, $t0 #t1 = 4 bits mais significativos
+	sll $s1, $s1, 4 #muda os 4 bits mais significativos
+	srl $t1, $t1, 28 #ajeita os bits depois de usar a mascara
+	sll $t1, $t1, 1 #multiplica t1 por 2
+	add $t1, $t1, 3 #adiciona 3 para q a0 possa receber o endereço do numero correspondente
+	add $a0, $a0, $t1 #a0 == endereço na string do caracter correspondente ao numero
 	#printa o caracter
-	li $v0, 4
-	syscall
+	li $a1, 1
+	jal escreve_arquivo
 	#incrementa o for
-	add $t1, $t1, 1
+	add $s0, $s0, 1
 	#condição do for
-	bne $t1, 8, for_bin_to_hex
-	
+	bne $s0, 8, for_bin_to_hex
+#epilogo
+	lw $ra, 0($sp)
+	lw $s0, 4($sp)
+	lw $s1, 8($sp)
+	lw $a0, 12($sp)
+	addiu $sp, $sp, 16
 	jr $ra
 	
 isola_opcode:
@@ -199,59 +248,48 @@ func_decodifica_R:
 	
 printa_R:
 #prologo
-	addiu $sp, $sp, -4
+	addiu $sp, $sp, -8
 	sw $ra, 0($sp)
+	sw $s0, 4($sp)
 #corpo
 	#analisa a funct
 	la $t0, ponteiro_R
 	lw $t0, 20($t0)
 	lw $a0, 0($t0) #$a0 contem o funct da instrução R
 	jal analisa_funct
-	#depois de ter pegado a string da função
-	#printa a função
-	move $a0, $v0
-	li $v0, 4
-	syscall
+	move $s0, $v1
 	#agora analisa os registradores
-	beq $v1, 2, fim_printa_R # se v1 == 2 instrução é syscall, não tem registradores
-	beq $v1, 1, print_RS #se v1 == 1 instrução é jr, só printa o RS
+	beq $s0, 2, fim_printa_R # se s0 == 2 instrução é syscall, não tem registradores
+	beq $s0, 1, print_RS #se s0 == 1 instrução é jr, só printa o RS
 	#RD
 	la $t0, ponteiro_R
 	lw $t0, 12($t0)
 	lw $a0, 0($t0) #$a0 contem o rd da instrução R
 	jal analisa_registrador
-	#printa RD
-	move $a0, $v0
-	li $v0, 4
-	syscall
 	#RS
 	print_RS:
 	la $t0, ponteiro_R
 	lw $t0, 4($t0)
 	lw $a0, 0($t0) #$a0 contem o rs da instrução R
 	jal analisa_registrador
-	#printa RS
-	move $a0, $v0
-	li $v0, 4
-	syscall
-	beq $v1, 1, fim_printa_R #se v1 == 1 instrução é jr, só printa o RS
+	beq $s0, 1, fim_printa_R #se s0 == 1 instrução é jr, só printa o RS
 	#RT
 	la $t0, ponteiro_R
 	lw $t0, 8($t0)
 	lw $a0, 0($t0) #$a0 contem o rt da instrução R
 	jal analisa_registrador
-	#printa RT
-	move $a0, $v0
-	li $v0, 4
-	syscall
 #epilogo
 	fim_printa_R:
 	lw $ra, 0($sp)
-	addiu $sp, $sp, 4
+	lw $s0, 4($sp)
+	addiu $sp, $sp, 8
 	jr $ra
 
 
 analisa_funct:
+#prologo
+	addiu $sp, $sp, -4
+	sw $ra, 0($sp)
 #corpo
 	#switch case com o campo funct
 	beq $a0, 32, funct_add     # se funct == 10 0000 
@@ -262,98 +300,152 @@ analisa_funct:
 	
 	
 	funct_add:
-	la $v0, str_add
+	la $a0, str_add
+	li $a1, 4
+	jal escreve_arquivo
 	li $v1, 0
-	jr $ra
+	j epilogo_AF
 	funct_addu:
-	la $v0, str_addu
+	la $a0, str_addu
+	li $a1, 5
+	jal escreve_arquivo
 	li $v1, 0
-	jr $ra
+	j epilogo_AF
 	funct_jr:
-	la $v0, str_jr
+	la $a0, str_jr
+	li $a1, 3
+	jal escreve_arquivo
 	li $v1, 1
-	jr $ra
+	j epilogo_AF
 	funct_syscall:
-	la $v0, str_syscall
+	la $a0, str_syscall
+	li $a1, 8
+	jal escreve_arquivo
 	li $v1, 2
-	jr $ra
+	j epilogo_AF
 	funct_mul:
-	la $v0, str_mul
+	la $a0, str_mul
+	li $a1, 4
+	jal escreve_arquivo
 	la $v1, 0
-	jr $ra	
+	j epilogo_AF
+#epilogo
+epilogo_AF:
+	lw $ra, 0($sp)
+	addiu $sp, $sp, 4
+	jr $ra
 	
 analisa_registrador:
 #prologo
+	addiu $sp, $sp, -4
+	sw $ra 0($sp)
 #corpo
+	move $t0, $a0
 	#retorna o endereço da string relativo ao registrador usado
-	la $v0, str_zero
-	beq $a0, 0, epilogo_AR
-	la $v0, str_at
-	beq $a0, 1, epilogo_AR
-	la $v0, str_v0
-	beq $a0, 2, epilogo_AR
-	la $v0, str_v1
-	beq $a0, 3, epilogo_AR
-	la $v0, str_a0
-	beq $a0, 4, epilogo_AR
-	la $v0, str_a1
-	beq $a0, 5, epilogo_AR
-	la $v0, str_a2
-	beq $a0, 6, epilogo_AR
-	la $v0, str_a3
-	beq $a0, 7, epilogo_AR
-	la $v0, str_t0
-	beq $a0, 8, epilogo_AR
-	la $v0, str_t1
-	beq $a0, 9, epilogo_AR
-	la $v0, str_t2
-	beq $a0, 10, epilogo_AR
-	la $v0, str_t3
-	beq $a0, 11, epilogo_AR
-	la $v0, str_t4
-	beq $a0, 12, epilogo_AR
-	la $v0, str_t5
-	beq $a0, 13, epilogo_AR
-	la $v0, str_t6
-	beq $a0, 14, epilogo_AR
-	la $v0, str_t7
-	beq $a0, 15, epilogo_AR
-	la $v0, str_s0
-	beq $a0, 16, epilogo_AR
-	la $v0, str_s1
-	beq $a0, 17, epilogo_AR
-	la $v0, str_s2
-	beq $a0, 18, epilogo_AR
-	la $v0, str_s3
-	beq $a0, 19, epilogo_AR
-	la $v0, str_s4
-	beq $a0, 20, epilogo_AR
-	la $v0, str_s5
-	beq $a0, 21, epilogo_AR
-	la $v0, str_s6
-	beq $a0, 22, epilogo_AR
-	la $v0, str_s7
-	beq $a0, 23, epilogo_AR
-	la $v0, str_t8
-	beq $a0, 24, epilogo_AR
-	la $v0, str_t9
-	beq $a0, 25, epilogo_AR
-	la $v0, str_k0
-	beq $a0, 26, epilogo_AR
-	la $v0, str_k1
-	beq $a0, 27, epilogo_AR
-	la $v0, str_gp
-	beq $a0, 28, epilogo_AR
-	la $v0, str_sp
-	beq $a0, 29, epilogo_AR
-	la $v0, str_fp
-	beq $a0, 30, epilogo_AR
-	la $v0, str_ra
-	beq $a0, 31, epilogo_AR
+	la $a0, str_zero
+	li $a1, 3
+	beq $t0, 0, print_AR
+	la $a0, str_at
+	li $a1, 3
+	beq $t0, 1, print_AR
+	la $a0, str_v0
+	li $a1, 3
+	beq $t0, 2, print_AR
+	la $a0, str_v1
+	li $a1, 3
+	beq $t0, 3, print_AR
+	la $a0, str_a0
+	li $a1, 3
+	beq $t0, 4, print_AR
+	la $a0, str_a1
+	li $a1, 3
+	beq $t0, 5, print_AR
+	la $a0, str_a2
+	li $a1, 3
+	beq $t0, 6, print_AR
+	la $a0, str_a3
+	li $a1, 3
+	beq $t0, 7, print_AR
+	la $a0, str_t0
+	li $a1, 3
+	beq $t0, 8, print_AR
+	la $a0, str_t1
+	li $a1, 3
+	beq $t0, 9, print_AR
+	la $a0, str_t2
+	li $a1, 4
+	beq $t0, 10, print_AR
+	la $a0, str_t3
+	li $a1, 4
+	beq $t0, 11, print_AR
+	la $a0, str_t4
+	li $a1, 4
+	beq $t0, 12, print_AR
+	la $a0, str_t5
+	li $a1, 4
+	beq $t0, 13, print_AR
+	la $a0, str_t6
+	li $a1, 4
+	beq $t0, 14, print_AR
+	la $a0, str_t7
+	li $a1, 4
+	beq $t0, 15, print_AR
+	la $a0, str_s0
+	li $a1, 4
+	beq $t0, 16, print_AR
+	la $a0, str_s1
+	li $a1, 4
+	beq $t0, 17, print_AR
+	la $a0, str_s2
+	li $a1, 4
+	beq $t0, 18, print_AR
+	la $a0, str_s3
+	li $a1, 4
+	beq $t0, 19, print_AR
+	la $a0, str_s4
+	li $a1, 4
+	beq $t0, 20, print_AR
+	la $a0, str_s5
+	li $a1, 4
+	beq $t0, 21, print_AR
+	la $a0, str_s6
+	li $a1, 4
+	beq $t0, 22, print_AR
+	la $a0, str_s7
+	li $a1, 4
+	beq $t0, 23, print_AR
+	la $a0, str_t8
+	li $a1, 4
+	beq $t0, 24, print_AR
+	la $a0, str_t9
+	li $a1, 4
+	beq $t0, 25, print_AR
+	la $a0, str_k0
+	li $a1, 4
+	beq $t0, 26, print_AR
+	la $a0, str_k1
+	li $a1, 4
+	beq $t0, 27, print_AR
+	la $a0, str_gp
+	li $a1, 4
+	beq $t0, 28, print_AR
+	la $a0, str_sp
+	li $a1, 4
+	beq $t0, 29, print_AR
+	la $a0, str_fp
+	li $a1, 4
+	beq $t0, 30, print_AR
+	la $a0, str_ra
+	li $a1, 4
+	beq $t0, 31, print_AR
+	
+print_AR:
+	jal escreve_arquivo
 	
 	
 #epilogo
-	epilogo_AR:
+	lw $ra, 0($sp)
+	addiu $sp, $sp, 4
 	jr $ra
 	
 
@@ -424,18 +516,14 @@ printa_I:
 	lw $t0, 0($t0)
 	lw $a0, 0($t0) #$a0 contem o opcode da instrução I
 	jal analisa_opcode_I
-	#depois de ter pegado a string da função
-	#printa a instrução
-	move $a0, $v0 #carrega em a0 o endereço que contem a string da instrução
-	li $v0, 4
-	syscall
+	move $t0, $v1
 	
 	#printa as informçaões baseado na instrução retornada
-	beq $v1, 0, print0
-	beq $v1, 1, print1
-	beq $v1, 2, print2
-	beq $v1, 3, print3
-	beq $v1, -1, fim_print_I
+	beq $t0, 0, print0
+	beq $t0, 1, print1
+	beq $t0, 2, print2
+	beq $t0, 3, print3
+	beq $t0, -1, fim_print_I
 	print0:
 	jal print0_I
 	j fim_print_I
@@ -467,10 +555,6 @@ print0_I:
 	lw $t0, 8($s0) #carrega em t0 o endereço de Rt no ponteiro_I
 	lw $a0, 0($t0) #carrega em a0 a informação de Rt
 	jal analisa_registrador
-	#printa Rt
-	move $a0, $v0
-	li $v0, 4
-	syscall
 	#IMM_I
 	lw $t0, 12($s0)#carrega em t0 o endereço do IMM_I
 	lw $a0, 0($t0)#carrega em a0 o IMM_I
@@ -478,23 +562,19 @@ print0_I:
 	jal bin_to_hex
 	
 	# printa '('
-	li $a0, '('
-	li $v0, 11
-	syscall
+	la $a0, str_abre_parenteses
+	li $a1, 1
+	jal escreve_arquivo
 	
 	#RS
 	lw $t0, 4($s0)
 	lw $a0, 0($t0)
 	jal analisa_registrador
-	#printa Rs
-	move $a0, $v0,
-	li $v0, 4
-	syscall
 	
 	# printa ')'
-	li $a0, ')'
-	li $v0, 11
-	syscall
+	la $a0, str_fecha_parenteses
+	li $a1, 1
+	jal escreve_arquivo
 	
 #pilogo
 	lw $s0, 4($sp)
@@ -514,18 +594,12 @@ print1_I:
 	lw $t0, 8($s0) #carrega em t0 o endereço de Rt no ponteiro_I
 	lw $a0, 0($t0) #carrega em a0 a informação de Rt
 	jal analisa_registrador
-	#printa Rt
-	move $a0, $v0
-	li $v0, 4
-	syscall
+
 	#RS
 	lw $t0, 4($s0)
 	lw $a0, 0($t0)
 	jal analisa_registrador
-	#printa Rs
-	move $a0, $v0,
-	li $v0, 4
-	syscall
+
 	#IMM_I
 	lw $t0, 12($s0)#carrega em t0 o endereço do IMM_I
 	lw $a0, 0($t0)#carrega em a0 o IMM_I
@@ -550,10 +624,7 @@ print2_I:
 	lw $t0, 8($s0) #carrega em t0 o endereço de Rt no ponteiro_I
 	lw $a0, 0($t0) #carrega em a0 a informação de Rt
 	jal analisa_registrador
-	#printa Rt
-	move $a0, $v0
-	li $v0, 4
-	syscall
+
 	#IMM_I
 	lw $t0, 12($s0)#carrega em t0 o endereço do IMM_I
 	lw $a0, 0($t0)#carrega em a0 o IMM_I
@@ -578,18 +649,12 @@ print3_I:
 	lw $t0, 4($s0)
 	lw $a0, 0($t0)
 	jal analisa_registrador
-	#printa Rs
-	move $a0, $v0,
-	li $v0, 4
-	syscall
+
 	#RT
 	lw $t0, 8($s0) #carrega em t0 o endereço de Rt no ponteiro_I
 	lw $a0, 0($t0) #carrega em a0 a informação de Rt
 	jal analisa_registrador
-	#printa Rt
-	move $a0, $v0
-	li $v0, 4
-	syscall
+
 	#IMM_I
 	lw $t0, 12($s0)#carrega em t0 o endereço do IMM_I
 	lw $a0, 0($t0)#carrega em a0 o IMM_I
@@ -605,6 +670,9 @@ print3_I:
 	
 	
 analisa_opcode_I:
+#prologo
+	addiu $sp, $sp, -4
+	sw $ra, 0($sp)
 #corpo
 	#switch case com o opcode I 
 	beq $a0, 9, op_addiu		#addiu == 0010 01
@@ -622,36 +690,57 @@ analisa_opcode_I:
 	
 	
 	op_addiu:
-	la $v0, str_addiu
+	la $a0, str_addiu
+	li $a1, 6
+	jal escreve_arquivo
 	li $v1, 1
-	jr $ra
+	j epilogo_analisa_op_I
 	op_addi:
-	la $v0, str_addi
+	la $a0, str_addi
+	li $a1, 5
+	jal escreve_arquivo
 	li $v1, 1
-	jr $ra
+	j epilogo_analisa_op_I
 	op_sw:
-	la $v0, str_sw
+	la $a0, str_sw
+	li $a1, 3
+	jal escreve_arquivo
 	li $v1, 0
-	jr $ra
+	j epilogo_analisa_op_I
 	op_lw:
-	la $v0, str_lw
+	la $a0, str_lw
+	li $a1, 3
+	jal escreve_arquivo
 	li $v1, 0
-	jr $ra	
+	j epilogo_analisa_op_I	
 	op_lui:
-	la $v0, str_lui
+	la $a0, str_lui
+	li $a1, 4
+	jal escreve_arquivo
 	li $v1, 2
-	jr $ra	
+	j epilogo_analisa_op_I	
 	op_ori:
-	la $v0, str_ori
+	la $a0, str_ori
+	li $a1, 4
+	jal escreve_arquivo
 	li $v1, 1
-	jr $ra	
+	j epilogo_analisa_op_I	
 	op_bne:
-	la $v0, str_bne
+	la $a0, str_bne
+	li $a1, 4
+	jal escreve_arquivo
 	li $v1, 3
-	jr $ra
+	j epilogo_analisa_op_I
 	instrucao_desconhecida:
-	la $v0, str_erro
+	la $a0, str_erro
+	li $a1, 23
+	jal escreve_arquivo
 	li $v1, -1
+	j epilogo_analisa_op_I
+#epilogo
+epilogo_analisa_op_I:
+	lw $ra, 0($sp)
+	addiu $sp, $sp, 4
 	jr $ra
 
 func_decodifica_J:
@@ -701,11 +790,7 @@ printa_J:
 	lw $t0, 0($t0)
 	lw $a0, 0($t0) #$a0 contem o opcode da instrução J
 	jal analisa_opcode_J
-	#depois de ter pegado a string da isntrução
-	#printa a instrução
-	move $a0, $v0
-	li $v0, 4
-	syscall
+
 	#IMM_J
 	#Para o print da instrução J, é necessário realizar um procedimento com seu IMM e PC+4 para descobrir o loop
 	la $t0, ponteiro_J
@@ -724,6 +809,9 @@ printa_J:
 	jr $ra
 
 analisa_opcode_J:
+#prologo
+	addiu $sp, $sp, -4
+	sw $ra, 0($sp)
 #corpo
 	#switch case com o opcode J
 	beq $a0, 2, op_j	#j == 0000 01
@@ -731,10 +819,20 @@ analisa_opcode_J:
 	
 	
 	op_j:
-	la $v0, str_j
-	jr $ra
+	la $a0, str_j
+	li $a1, 2
+	jal escreve_arquivo
+	j epilogo_analisa_op_J
 	op_jal:
-	la $v0, str_jal
+	la $a0, str_jal
+	li $a1, 4
+	jal escreve_arquivo
+	j epilogo_analisa_op_J
+	
+#epilogo
+epilogo_analisa_op_J:
+	lw $ra, 0($sp)
+	addiu $sp, $sp, 4
 	jr $ra
 	
 descobre_loop:
@@ -768,19 +866,30 @@ main:
 	sw $zero, 8($sp)#valor de verificação de leitura do arquivo
 	sw $ra, 4($sp) #valor de retorno para função chamadora
 	sw $zero, 0($sp)#valor de retorno desta função
-	la $a0, nome_arquivo
 	jal abrir_arquivo_para_leitura
-	la $t0, descritor_arquivo
+	la $t0, descritor_arquivo_de_leitura
 	sw $v0, 0($t0) #armazenar o descritor do arquivo após abrir o arquivo
-	bgtz $v0, main_if_abriu_arquivo
-	
-	
-	main_if_nao_abriu_arquivo:
+	bgtz $v0, main_if_abriu_arquivo_de_leitura
+	main_if_nao_abriu_arquivo_de_leitura:
 		la $a0, string_erro_ao_abrir_arquivo
 		li $v0, 4
 		syscall
 		j fim_leitura_arquivo
-	main_if_abriu_arquivo:
+	main_if_abriu_arquivo_de_leitura:
+		la $a0, string_abriu_arquivo
+		li $v0, 4
+		syscall
+		
+	jal abrir_arquivo_para_escrita
+	la $t0, descritor_arquivo_de_escrita
+	sw $v0, 0($t0) #armazenar o descritor do arquivo após abrir o arquivo
+	bgtz $v0, main_if_abriu_arquivo_de_escrita
+	main_if_nao_abriu_arquivo_de_escrita:
+		la $a0, string_erro_ao_abrir_arquivo
+		li $v0, 4
+		syscall
+		j fim_leitura_arquivo
+	main_if_abriu_arquivo_de_escrita:
 		la $a0, string_abriu_arquivo
 		li $v0, 4
 		syscall
@@ -793,14 +902,11 @@ main:
 		lw $a0, 0($a0) #carrega em a0 o valor de PC atual
 		jal bin_to_hex
 		#printa espaço
-		li $a0, ' '
-		li $v0, 11
-		syscall
+		la $a0, space
+		li $a1, 1
+		jal escreve_arquivo
 	main_ler_arquivo:
-		la $t0, descritor_arquivo
-		lw $a0, 0($t0)#armazena em a0 o descritor
-	
-		la $a1, buffer_leitura # armazena o endereço do buffer em a1
+		
 		
 		jal ler_arquivo
 		sw $v0, 8($sp) #armazena o numero de bits lidos
@@ -810,9 +916,9 @@ main:
 		sw $a0, 16($sp)# armazena a instrução
 		jal bin_to_hex #printa a instrução
 		#printa espaço
-		li $a0, ' '
-		li $v0, 11
-		syscall
+		la $a0, space
+		li $a1, 1
+		jal escreve_arquivo
 	main_isola_opcode:
 		
 		lw $a0, 16($sp)#carrega em a0 a instrução novamente
@@ -828,9 +934,9 @@ main:
 		jal decodifica_instrucao
 	main_quebra_linha_para_proxima_instrucao:
 		#printa '\n'
-		li $a0, '\n'
-		li $v0, 11
-		syscall
+		la $a0, enter
+		li $a1, 1
+		jal escreve_arquivo
 	main_proximo_PC:
 		# próximo PC == PC + 4
 		la $t0, PC
@@ -855,11 +961,13 @@ fim_leitura_arquivo:
 	
 .data
 
-nome_arquivo: .asciiz "dados_trabalho.bin"
-descritor_arquivo: .word 0 #descritor do arquivo
-
+nome_arquivo_de_leitura: .asciiz "arquivo_entrada.bin"
+descritor_arquivo_de_leitura: .word 0 #descritor do arquivo de leitura
 buffer_leitura: .space 4  # buffer para a leitura do arquivo
 
+nome_arquivo_de_escrita: .asciiz "arquivo_saida.txt"
+descritor_arquivo_de_escrita: .word 0 #descritor do arquivo de saida
+buffer_escrita: .space 4 # buffer para escrita no arquivo
 
 string_erro_ao_abrir_arquivo: .asciiz "erro ao abrir arquivo\n"
 string_abriu_arquivo: .asciiz "abriu arquivo\n"
@@ -981,3 +1089,7 @@ str_ra: .asciiz "$31 "
 
 hex_char: .asciiz "0x", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"
 
+space: .asciiz " "
+enter: .asciiz "\n"
+str_fecha_parenteses: .asciiz ")"
+str_abre_parenteses: .asciiz "("
