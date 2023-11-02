@@ -25,7 +25,6 @@ abrir_arquivo_para_escrita:
 	
 escreve_arquivo:
 #prologo
-# tenho que passar por a0 a string que quero botar no arquivo e por a1 o numero de caracteres da string. Depois passas a1 -> a2 e a0 -> a1
 #corpo
 	move $a2, $a1
 	move $a1, $a0
@@ -74,6 +73,28 @@ bin_to_hex:
 	sw $s1, 8($sp)
 	sw $a0, 12($sp)#armazena o numero que foi passado para a função
 #corpo
+	#caso o IMM_I seja negativo
+	#se a1 = 1
+	bne $a1, 1, nao_estende_sinal
+	estende_sinal:
+	lw $t0, 12($sp)
+	
+	la $t1, mascara_bit_16
+	lw $t1, 0($t1)
+	
+	and $t2, $t1, $t0
+	srl $t2, $t2, 15
+	
+	bne $t2, 1, nao_estende_sinal
+	
+	la $t1, mascara_16_primeiros_bits
+	lw $t1, 0($t1)
+	
+	or $t0, $t0, $t1
+	
+	sw $t0, 12($sp)
+	
+	nao_estende_sinal:
 	
 	#imprimir o Ox
 	la $a0, hex_char # a0 = endereço da string com caracteres hexadecimais
@@ -558,6 +579,7 @@ print0_I:
 	#IMM_I
 	lw $t0, 12($s0)#carrega em t0 o endereço do IMM_I
 	lw $a0, 0($t0)#carrega em a0 o IMM_I
+	li $a1, 1
 	#printa IMM_I
 	jal bin_to_hex
 	
@@ -603,6 +625,7 @@ print1_I:
 	#IMM_I
 	lw $t0, 12($s0)#carrega em t0 o endereço do IMM_I
 	lw $a0, 0($t0)#carrega em a0 o IMM_I
+	li $a1, 1
 	#printa IMM_I
 	jal bin_to_hex
 	
@@ -628,6 +651,7 @@ print2_I:
 	#IMM_I
 	lw $t0, 12($s0)#carrega em t0 o endereço do IMM_I
 	lw $a0, 0($t0)#carrega em a0 o IMM_I
+	li $a1, 1
 	#printa IMM_I
 	jal bin_to_hex
 	
@@ -658,6 +682,7 @@ print3_I:
 	#IMM_I
 	lw $t0, 12($s0)#carrega em t0 o endereço do IMM_I
 	lw $a0, 0($t0)#carrega em a0 o IMM_I
+	li $a1, 1
 	#printa IMM_I
 	jal bin_to_hex
 	
@@ -800,6 +825,7 @@ printa_J:
 	
 	#printa loop
 	move $a0, $v0 #carrega o loop em a0
+	li $a1, 0
 	jal bin_to_hex
 	
 #epilogo
@@ -900,6 +926,7 @@ main:
 	main_printa_PC:
 		la $a0, PC #carrega em a0 o endereço de PC que indica o PC atual
 		lw $a0, 0($a0) #carrega em a0 o valor de PC atual
+		li $a1, 0
 		jal bin_to_hex
 		#printa espaço
 		la $a0, space
@@ -914,6 +941,7 @@ main:
 		la $t1, buffer_leitura
 		lw $a0, 0($t1) #carrega a0 a instrução lida
 		sw $a0, 16($sp)# armazena a instrução
+		li $a1, 0
 		jal bin_to_hex #printa a instrução
 		#printa espaço
 		la $a0, space
@@ -976,7 +1004,9 @@ PC: .word 0x00400000
 
 mascaras:
 	mascara_4_primeiros_bits: .word 0xf0000000
+	mascara_16_primeiros_bits: .word 0xffff0000
 	mascara_26_bits: .word 0x0fffffff
+	mascara_bit_16: .word 0x00008000
 # -------------------------------------
 # | OP | RS | RT | RD | SHAMT | FUNCT |
 #    6    5    5    5     5       6
